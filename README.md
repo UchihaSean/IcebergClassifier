@@ -1,2 +1,1 @@
-# IcebergClassifier
-Kaggle Competition
+# IcebergClassifier
