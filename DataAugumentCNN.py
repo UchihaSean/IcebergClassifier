@@ -9,6 +9,8 @@ from keras.optimizers import Adam
 import cv2
 import keras
 
+
+
 def get_scaled_imgs(df):
     imgs = []
 
@@ -27,31 +29,40 @@ def get_scaled_imgs(df):
 
     return np.array(imgs)
 def get_more_images(imgs):
-    
+
     more_images = []
     vert_flip_imgs = []
     hori_flip_imgs = []
-      
+    cent_flip_imgs = []
+
     for i in range(0,imgs.shape[0]):
         a=imgs[i,:,:,0]
         b=imgs[i,:,:,1]
         c=imgs[i,:,:,2]
-        
+
         av=cv2.flip(a,1)
         ah=cv2.flip(a,0)
+        ac=cv2.flip(a,-1)
+
         bv=cv2.flip(b,1)
         bh=cv2.flip(b,0)
+        bc=cv2.flip(b,-1)
+
         cv=cv2.flip(c,1)
         ch=cv2.flip(c,0)
-        
+        cc=cv2.flip(c,-1)
+
+
         vert_flip_imgs.append(np.dstack((av, bv, cv)))
         hori_flip_imgs.append(np.dstack((ah, bh, ch)))
-      
+        cent_flip_imgs.append(np.dstack((ac, bc, cc)))
+
     v = np.array(vert_flip_imgs)
     h = np.array(hori_flip_imgs)
-       
-    more_images = np.concatenate((imgs,v,h))
-    
+    c = np.array(cent_flip_imgs)
+
+    more_images = np.concatenate((imgs,v,h,c))
+
     return more_images
 
 def getModel():
@@ -116,7 +127,7 @@ def getModel():
 
     return combined_model
 
-df_train = pd.read_json('../input/train.json')
+df_train = pd.read_json('./input/train.json')
 Xtrain = get_scaled_imgs(df_train)
 Ytrain = np.array(df_train['is_iceberg'])
 
@@ -128,28 +139,28 @@ Xtrain = Xtrain[idx_tr[0],...]
 Xinc = df_train.inc_angle[idx_tr[0]]
 
 Xtrain = get_more_images(Xtrain)
-Xinc = np.concatenate((Xinc,Xinc,Xinc))
-Ytrain = np.concatenate((Ytrain,Ytrain,Ytrain))
+Xinc = np.concatenate((Xinc,Xinc,Xinc,Xinc))
+Ytrain = np.concatenate((Ytrain,Ytrain,Ytrain,Ytrain))
 
 
 model = getModel()
 model.summary()
 
-batch_size = 128
+batch_size = 256
 earlyStopping = EarlyStopping(monitor='val_loss', patience=10, verbose=0, mode='min')
-mcp_save = ModelCheckpoint('.mdl_wts.hdf5', save_best_only=True, monitor='val_loss', mode='min')
+mcp_save = ModelCheckpoint('.mdl_wts.hdf6', save_best_only=True, monitor='val_loss', mode='min')
 reduce_lr_loss = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=7, verbose=1, epsilon=1e-4, mode='min')
 
 model.fit([Xtrain,Xinc], Ytrain, batch_size=batch_size, epochs=50, verbose=1,
           callbacks=[earlyStopping, mcp_save, reduce_lr_loss], validation_split=0.25)
 
 
-model.load_weights(filepath = '.mdl_wts.hdf5')
+model.load_weights(filepath = '.mdl_wts.hdf6')
 score = model.evaluate([Xtrain,Xinc], Ytrain, verbose=1)
 print('Train score:', score[0])
 print('Train accuracy:', score[1])
 
-df_test = pd.read_json('../input/test.json')
+df_test = pd.read_json('./input/test.json')
 df_test.inc_angle = df_test.inc_angle.replace('na',0)
 Xtest = (get_scaled_imgs(df_test))
 Xinc = df_test.inc_angle
@@ -158,4 +169,4 @@ pred_test = model.predict([Xtest,Xinc])
 submission = pd.DataFrame({'id': df_test["id"], 'is_iceberg': pred_test.reshape((pred_test.shape[0]))})
 print(submission.head(10))
 
-submission.to_csv('cnn.csv', index=False)
+submission.to_csv('output/cnn_256_10_7.csv', index=False)

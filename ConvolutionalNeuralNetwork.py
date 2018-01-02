@@ -4,15 +4,18 @@ from keras.models import Sequential, Model
 from keras.layers import Dense, Dropout, Flatten, Input
 from keras.layers import Conv2D, MaxPooling2D
 from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
+from keras.layers.normalization import BatchNormalization
 from keras.optimizers import Adam
+import cv2
 import keras
 
+np.random.seed(1234)
 
 def get_scaled_imgs(df):
     imgs = []
 
     for i, row in df.iterrows():
-        # make 75x75 image
+        #make 75x75 image
         band_1 = np.array(row['band_1']).reshape(75, 75)
         band_2 = np.array(row['band_2']).reshape(75, 75)
         band_3 = band_1 + band_2 # plus since log(x*y) = log(x) + log(y)
@@ -25,44 +28,33 @@ def get_scaled_imgs(df):
         imgs.append(np.dstack((a, b, c)))
 
     return np.array(imgs)
+def get_more_images(imgs):
 
+    more_images = []
+    vert_flip_imgs = []
+    hori_flip_imgs = []
 
-# def get_more_images(imgs):
-#
-#     more_images = []
-#     vert_flip_imgs = []
-#     hori_flip_imgs = []
-#     cent_flip_imgs = []
-#
-#     for i in range(0,imgs.shape[0]):
-#         a=imgs[i,:,:,0]
-#         b=imgs[i,:,:,1]
-#         c=imgs[i,:,:,2]
-#
-#         av=cv2.flip(a,1)
-#         ah=cv2.flip(a,0)
-#         ac=cv2.flip(a,-1)
-#
-#         bv=cv2.flip(b,1)
-#         bh=cv2.flip(b,0)
-#         bc=cv2.flip(b,-1)
-#
-#         cv=cv2.flip(c,1)
-#         ch=cv2.flip(c,0)
-#         cc=cv2.flip(c,-1)
-#
-#
-#         vert_flip_imgs.append(np.dstack((av, bv, cv)))
-#         hori_flip_imgs.append(np.dstack((ah, bh, ch)))
-#         cent_flip_imgs.append(np.dstack((ac, bc, cc)))
-#
-#     v = np.array(vert_flip_imgs)
-#     h = np.array(hori_flip_imgs)
-#     c = np.array(cent_flip_imgs)
-#
-#     more_images = np.concatenate((imgs,v,h,c))
-#
-#     return more_images
+    for i in range(0,imgs.shape[0]):
+        a=imgs[i,:,:,0]
+        b=imgs[i,:,:,1]
+        c=imgs[i,:,:,2]
+
+        av=cv2.flip(a,1)
+        ah=cv2.flip(a,0)
+        bv=cv2.flip(b,1)
+        bh=cv2.flip(b,0)
+        cv=cv2.flip(c,1)
+        ch=cv2.flip(c,0)
+
+        vert_flip_imgs.append(np.dstack((av, bv, cv)))
+        hori_flip_imgs.append(np.dstack((ah, bh, ch)))
+
+    v = np.array(vert_flip_imgs)
+    h = np.array(hori_flip_imgs)
+
+    more_images = np.concatenate((imgs,v,h))
+
+    return more_images
 
 def getModel():
     # Build keras model
@@ -137,17 +129,21 @@ Ytrain = Ytrain[idx_tr[0]]
 Xtrain = Xtrain[idx_tr[0],...]
 Xinc = df_train.inc_angle[idx_tr[0]]
 
-# Xtrain = get_more_images(Xtrain)
-# Ytrain = np.concatenate((Ytrain,Ytrain,Ytrain))
+Xtrain = get_more_images(Xtrain)
+Xinc = np.concatenate((Xinc,Xinc,Xinc))
+Ytrain = np.concatenate((Ytrain,Ytrain,Ytrain))
 
 
 model = getModel()
 model.summary()
 
-batch_size = 32
+
+batch_size = 256
 earlyStopping = EarlyStopping(monitor='val_loss', patience=10, verbose=0, mode='min')
 mcp_save = ModelCheckpoint('.mdl_wts.hdf5', save_best_only=True, monitor='val_loss', mode='min')
-reduce_lr_loss = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=7, verbose=1, epsilon=1e-4, mode='min')
+reduce_lr_loss = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=5, verbose=1, epsilon=1e-4, mode='min')
+
+model.load_weights(filepath = '.mdl_wts.hdf5')
 
 model.fit([Xtrain,Xinc], Ytrain, batch_size=batch_size, epochs=50, verbose=1,
           callbacks=[earlyStopping, mcp_save, reduce_lr_loss], validation_split=0.25)
@@ -167,9 +163,4 @@ pred_test = model.predict([Xtest,Xinc])
 submission = pd.DataFrame({'id': df_test["id"], 'is_iceberg': pred_test.reshape((pred_test.shape[0]))})
 print(submission.head(10))
 
-submission.to_csv('output/cnn_combined.csv', index=False)
-
-
-
-
-
+submission.to_csv('output/cnn_3_256_15_5.csv', index=False)
